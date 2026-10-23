@@ -1,0 +1,180 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JackFlix Admin</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body{margin:0;padding:20px;background:#101010;color:white;font-family:Arial,sans-serif}
+    .box{max-width:600px;margin:20px auto;background:#1d1d1d;padding:22px;border-radius:12px}
+    h1{color:#ff3030} input,select,button{box-sizing:border-box;width:100%;padding:12px;margin:7px 0;border:0;border-radius:6px}
+    button{background:#e50914;color:white;font-weight:bold;cursor:pointer}
+    .movie{padding:12px;margin-top:10px;background:#292929;border-radius:8px;overflow-wrap:anywhere}
+    .delete{background:#555}
+    #app{display:none}
+    small{color:#bbb}
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h1>🎬 JackFlix Admin</h1>
+    <p><small>Apne Supabase admin account se login karo.</small></p>
+
+    <section id="login">
+      <input id="email" type="email" placeholder="Admin email">
+      <input id="password" type="password" placeholder="Password">
+      <button id="loginBtn">Login</button>
+    </section>
+
+    <section id="app">
+      <button id="logoutBtn">Logout</button>
+      <h2>Add Movie</h2>
+      <form id="movieForm">
+        <input id="title" placeholder="Movie title" required>
+        <input id="year" type="number" placeholder="Release year">
+        <select id="category">
+          <option>Bollywood</option>
+          <option>Hollywood</option>
+          <option>South Indian</option>
+          <option>Anime</option>
+          <option>Other</option>
+        </select>
+        <input id="language" placeholder="Language (e.g. Hindi)" value="Hindi">
+        <input id="quality" placeholder="Quality (e.g. 1080p)">
+        <input id="poster" type="url" placeholder="Poster image URL">
+        <input id="download" type="url" placeholder="Authorized download URL" required>
+        <button type="submit">Add Movie</button>
+      </form>
+      <p id="status"></p>
+      <h2>Movies</h2>
+      <div id="movies"></div>
+    </section>
+  </div>
+
+<script>
+  // Apne Supabase Project URL aur Publishable Key yahan paste karo.
+  const SUPABASE_URL = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
+  const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_wz7kl0hKgX5eRY06T42gsw_2D5KplNK";
+
+  const client = window.supabase.createClient(
+    SUPABASE_URL,
+    SUPABASE_PUBLISHABLE_KEY
+  );
+
+  const $ = id => document.getElementById(id);
+  const status = message => $("status").textContent = message;
+
+  $("loginBtn").addEventListener("click", async () => {
+    const { error } = await client.auth.signInWithPassword({
+      email: $("email").value.trim(),
+      password: $("password").value
+    });
+
+    if (error) {
+      alert("Login failed: " + error.message);
+      return;
+    }
+
+    await showApp();
+  });
+
+  async function showApp() {
+    const { data } = await client.auth.getSession();
+    if (!data.session) return;
+    $("login").style.display = "none";
+    $("app").style.display = "block";
+    await loadMovies();
+  }
+
+  $("logoutBtn").addEventListener("click", async () => {
+    await client.auth.signOut();
+    $("app").style.display = "none";
+    $("login").style.display = "block";
+  });
+
+  $("movieForm").addEventListener("submit", async event => {
+    event.preventDefault();
+    status("Adding movie...");
+
+    const movie = {
+      title: $("title").value.trim(),
+      release_year: $("year").value ? Number($("year").value) : null,
+      category: $("category").value,
+      language: $("language").value.trim() || "Hindi",
+      quality: $("quality").value.trim() || null,
+      poster_url: $("poster").value.trim() || null,
+      download_url: $("download").value.trim()
+    };
+
+    const { error } = await client.from("movies").insert(movie);
+
+    if (error) {
+      status("Error: " + error.message);
+      return;
+    }
+
+    status("Movie added successfully!");
+    $("movieForm").reset();
+    $("language").value = "Hindi";
+    await loadMovies();
+  });
+
+  async function loadMovies() {
+    const { data, error } = await client
+      .from("movies")
+      .select("id,title,release_year,category,language,quality")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      $("movies").textContent = "Could not load movies: " + error.message;
+      return;
+    }
+
+    $("movies").replaceChildren();
+
+    if (!data.length) {
+      $("movies").textContent = "Abhi koi movie add nahi hui.";
+      return;
+    }
+
+    data.forEach(movie => {
+      const card = document.createElement("div");
+      card.className = "movie";
+
+      const title = document.createElement("strong");
+      title.textContent = movie.title;
+      card.appendChild(title);
+
+      const details = document.createElement("p");
+      details.textContent = [
+        movie.release_year,
+        movie.category,
+        movie.language,
+        movie.quality
+      ].filter(Boolean).join(" • ");
+      card.appendChild(details);
+
+      const del = document.createElement("button");
+      del.className = "delete";
+      del.textContent = "Delete";
+      del.addEventListener("click", async () => {
+        if (!confirm("Is movie ko delete karna hai?")) return;
+        const { error } = await client.from("movies")
+          .delete().eq("id", movie.id);
+        if (error) {
+          alert("Delete failed: " + error.message);
+        } else {
+          await loadMovies();
+        }
+      });
+      card.appendChild(del);
+      $("movies").appendChild(card);
+    });
+  }
+
+  showApp();
+</script>
+</body>
+</html>
